@@ -1,0 +1,321 @@
+from django.shortcuts import render, Http404, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+from datetime import datetime, timedelta
+from django.contrib.auth import authenticate
+from Car.models import *
+
+
+@csrf_exempt
+def update_location_and_parameters(request):
+    if request.method == "POST":
+        post = json.loads(request.body.decode("utf-8"))
+        print(post)
+        response_data = {}
+        if post.get("key") == "70b66a89929e93416d2ef535893ea14da331da8991cc7c74010b4f3d7fabfd62":
+            v_number = post['bus_number']
+            time_recorded = datetime.strptime(post['time_recorded'], '%d/%m/%Y %H:%M:%S')
+            if post['known_location'] == 'true':
+                place_name = post['place_name']
+                try:
+                    Location.objects.create(v_number=v_number,
+                                            place_name=place_name,
+                                            known_location=True,
+                                            time_recorded=time_recorded,
+                                            )
+                    response_data['status'] = 'Success'
+                except Exception as e:
+                    response_data['status'] =  str(e)
+                    print(e)
+
+            else:
+                latitude = post['latitude']
+                longitude = post['longitude']
+                fuel = post['fuel']
+                speed = post['speed']
+                battery=post['battery']
+                distance = post['distance']
+                try:
+                    location = Location.objects.create(v_number=v_number,
+                                                        latitude=latitude,
+                                                        longitude=longitude,
+                                                        time_recorded=time_recorded,
+                                                        )
+
+                    Bp = CarParameter.objects.create(v_number=v_number,
+                                                    speed=speed,
+                                                    fuel=fuel,
+                                                    battery=battery,
+                                                    distance=distance,
+                                                    time_recorded=time_recorded
+                                                    )
+                    car = Car.objects.get(v_number=v_number)
+                    car.location = location
+                    car.parameters = Bp
+                    car.save()
+
+                    response_data['status'] = 'true'
+                except Exception as e:
+                    response_data['status'] = str(e)
+                    print(e)
+
+        else:
+            response_data['status'] = 'Request Invalid'
+
+        return HttpResponse(
+            json.dumps(response_data),
+            content_type = "application/json"
+            )
+    else:
+        raise Http404("NOT ALLOWED")
+
+
+@csrf_exempt
+def get_bus_data_current_time(request):
+    if request.method == "POST":
+        response_data = {}
+        try:
+            post = json.loads(request.body.decode("utf-8"))
+            if post.get("key") == '32c25a275fdf9df2668560732691af2a95c53429605c34ea989fd359':
+                v_number = post['bus_number']
+                try:
+                    car = Car.objects.get(v_number=v_number)
+                    location = car.location
+                    car_parameters = car.parameters
+                    location_data = {
+                            "latitude": location.latitude,
+                            "longitude": location.longitude,
+                    }
+                    response_data["location"] = location_data
+                    response_data["time_recorded"] = str(location.time_recorded)
+                    response_data["speed"] =  car_parameters.speed
+                    response_data["fuel"] = car_parameters.fuel
+                    response_data["battery"] = car_parameters.battery
+                    response_data["distance"] = car_parameters.distance
+                    response_data["status"] = "true"
+
+                except Exception as e:
+                    response_data["status"] = str(e)
+                    print(e)
+
+            else:
+                response_data['status'] = 'Request Invalid'
+        except Exception as e:
+            response_data['error'] = e
+        return HttpResponse(
+            json.dumps(response_data),
+                content_type = "application/json"
+            )
+    else:
+        raise Http404("NOT ALLOWED")
+
+@csrf_exempt
+def get_bus_data_from_time(request):
+    if request.method == "POST":
+        response_data = {}
+        try:
+            post = json.loads(request.body.decode("utf-8"))
+            if post.get("key") == 'bd0e7468203f76439a9d4cb3d29a2403cfe49e41e781813e0cdec392cf054dc9':
+                v_number = post['bus_number']
+                from_time = datetime.strptime(post['from_time'], '%d/%m/%Y %H:%M:%S')
+                to_time = datetime.strptime(post['to_time'], '%d/%m/%Y %H:%M:%S')
+                try:
+                    car = Car.objects.get(v_number=v_number)
+                    total_locations = Location.objects.filter(v_number=v_number,
+                                                                known_location=False,
+                                                                time_recorded__gte=from_time,
+                                                                  time_recorded__lte=to_time,
+                                                                )
+                    print(total_locations)
+                    index = -1
+                    locations = {}
+                    for index, location in enumerate(total_locations):
+                        data = {
+                                "latitude": location.latitude,
+                                "longitude": location.longitude,
+                                "time_recorded": str(location.time_recorded),
+                                }
+                        locations[index] = data
+
+                    response_data["locations"] = locations
+                    response_data["number_of_locations"] = index + 1
+                    total_known_locs = Location.objects.filter(v_number=v_number,
+                                                                known_location=True,
+                                                                time_recorded__gte=from_time,
+                                                               time_recorded__lte=to_time,
+                                                                )
+                    locations = {}
+                    for index, location in enumerate(total_known_locs):
+                        data = {"place_name": location.place_name,
+                                "time_recorded": str(location.time_recorded),
+                                }
+                        locations[index] = data
+                    response_data["known_locations"] = locations
+                    response_data["number_of_known_locations"] = index + 1
+                    car_parameters = CarParameter.objects.filter(v_number=v_number,
+                                                                time_recorded__gte=from_time,
+                                                                 time_recorded__lte=to_time,
+                                                                )
+                    speed_data, fuel_data , distance_data = {}, {}, {}
+                    for index, car_param in enumerate(car_parameters):
+                        time_recorded = car_param.time_recorded
+                        speed = {
+                                "speed": car_param.speed,
+                                "time_recorded": str(time_recorded)
+                            }
+                        fuel = {
+                                "fuel": car_param.fuel,
+                                "time_recorded": str(time_recorded)
+                            }
+                        battery = {
+                                "battery": car_param.battery,
+                                "time_recorded": str(time_recorded)
+                            }
+                        distance = {
+                                "distance": car_param.distance,
+                                "time_recorded": str(time_recorded)
+                            }
+                        speed_data[index] = speed
+                        fuel_data[index] = fuel
+                        distance_data[index] = distance
+                    response_data["number_of_parameters"] = index + 1
+                    response_data["speed_data"] = speed_data
+                    response_data["fuel_data"] = fuel_data
+                    response_data["battery"] = battery
+                    response_data["distance_data"] = distance_data
+
+                    response_data["status"] = "true"
+
+                except Exception as e:
+                    response_data["status"] = str(e)
+                    print(e)
+            else:
+                response_data['status'] = 'Request Invalid'
+        except Exception as e:
+            response_data['error'] = e
+        return HttpResponse(
+            json.dumps(response_data),
+                content_type = "application/json"
+            )
+    else:
+        raise Http404("NOT ALLOWED")
+
+
+@csrf_exempt
+def get_bus_data_from_user(request):
+    if request.method == "POST":
+        response_data = {}
+        try:
+            post = json.loads(request.body.decode("utf-8"))
+            if post.get("key") == '32c25a275fdf9df2668560732691af2a95c53429605c34ea989fd359':
+                username = post['username']
+                password = post['password']
+                user = authenticate(username=username, password=password)
+                if user is not None:
+                    try:
+                        cars = Car.objects.filter(owner=user)
+                        buss = {}
+                        for index, bus in enumerate(cars):
+                            data = {
+                                    "bus_number": bus.bus_number,
+                                    "driver": bus.driver.name,
+                                    "latitude": bus.location.latitude,
+                                    "longitude": bus.location.longitude,
+                                    "time_recorded": str(bus.location.time_recorded),
+                                    }
+                            buss[index] = data
+
+                        response_data["buses"] = buss
+
+
+                    except Exception as e:
+                        response_data["status"] = str(e)
+                        print(e)
+                else:
+                    return HttpResponse("Invalid login details supplied.")
+
+            else:
+                response_data['status'] = 'Request Invalid'
+        except Exception as e:
+            response_data['error'] = e
+        print(response_data)
+        return HttpResponse(
+            json.dumps(response_data),
+                content_type = "application/json"
+            )
+    else:
+        raise Http404("NOT ALLOWED")
+
+@csrf_exempt
+def update_stop_location(request):
+    if request.method == "POST":
+        post = json.loads(request.body.decode("utf-8"))
+        print(post)
+        response_data = {}
+        if post.get("key") == "70b66a89929e93416d2ef535893ea14da331da8991cc7c74010b4f3d7fabfd62":
+            v_number = post['v_number']
+            latitude = post['latitude']
+            longitude = post['longitude']
+            arrival_time = datetime.strptime(post['arrival_time'], '%d/%m/%Y %H:%M:%S')
+            departure_time = datetime.strptime(post['departure_time'], '%d/%m/%Y %H:%M:%S')
+            try:
+                location = Location.objects.create(v_number=v_number,
+                                                        latitude=latitude,
+                                                        longitude=longitude,
+                                                        )
+                stop = Stop.objects.create(location=location,
+                                               arrival_time=arrival_time,
+                                               departure_time=departure_time,
+                                               )
+                response_data['status'] = 'true'
+            except Exception as e:
+                response_data['status'] = str(e)
+                print(e)
+
+        else:
+            response_data['status'] = 'Request Invalid'
+
+        return HttpResponse(
+            json.dumps(response_data),
+            content_type = "application/json"
+            )
+    else:
+        raise Http404("NOT ALLOWED")
+
+@csrf_exempt
+def get_stop_data_from_time(request):
+    if request.method == "POST":
+        response_data = {}
+        try:
+            post = json.loads(request.body.decode("utf-8"))
+            if post.get("key") == 'bd0e7468203f76439a9d4cb3d29a2403cfe49e41e781813e0cdec392cf054dc9':
+                v_number = post['v_number']
+                from_time = datetime.strptime(post['from_time'], '%d/%m/%Y %H:%M:%S')
+                to_time = datetime.strptime(post['to_time'], '%d/%m/%Y %H:%M:%S')
+                try:
+                    stops = Stop.objects.filter(arrival_time__gte=from_time,
+                                                departure_time__lte=to_time,
+                                                )
+                    print(stops)
+                    stops1 = {}
+                    for index, stop in enumerate(stops):
+                        location= stop.location
+                        if location.v_number == v_number:
+                            data = {
+                                "latitude": stop.location.latitude,
+                                "longtitude": stop.location.longitude,
+                                "halt_time": str(stop.halt_time),
+                                }
+                        stops1[index] = data
+                    response_data["stops"] = stops1
+                except Exception as e:
+                    response_data["status"] = str(e)
+                    print(e)
+            else:
+                response_data['status'] = 'Request Invalid'
+        except Exception as e:
+            response_data['error'] = e
+        return HttpResponse(json.dumps(response_data),
+                content_type = "application/json")
+    else:
+        raise Http404("NOT ALLOWED")
