@@ -94,7 +94,7 @@ txaio==1.0.0
 unity-lens-photos==1.0
 urllib3==1.21.1
 virtualenv==15.0.1
-Werkzeug==0.14.1
+Werkzeug==0.15.3
 whitenoise==3.2
 xlrd==0.9.4
 xlwt==0.7.5
