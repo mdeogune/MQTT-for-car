@@ -84,7 +84,7 @@ simplejson==3.8.1
 six==1.10.0
 statsmodels==0.6.1
 tables==3.2.2
-tensorflow==1.4.1
+tensorflow==2.5.3
 tensorflow-tensorboard==0.4.0rc3
 tf-cnnvis==1.0.0
 tqdm==4.19.5
