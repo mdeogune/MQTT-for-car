@@ -33,7 +33,7 @@ jdcal==1.0
 joblib==0.9.4
 Keras==2.1.2
 libais==0.16
-lxml==3.5.0
+lxml==4.9.1
 lz4==0.7.0
 Markdown==2.6.9
 matplotlib==1.5.1
